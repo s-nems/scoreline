@@ -30,12 +30,14 @@ java {
 }
 
 dependencies {
+    implementation(libs.slf4j.api)
     errorprone(libs.errorprone.core)
     errorprone(libs.nullaway)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testRuntimeOnly(libs.slf4j.simple)
 }
 
 nullaway {

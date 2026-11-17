@@ -1,5 +1,7 @@
 package io.github.snems.scoreline;
 
+import static org.slf4j.LoggerFactory.getLogger;
+
 import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.MatchId;
 import io.github.snems.scoreline.exception.MatchNotFoundException;
@@ -7,9 +9,12 @@ import io.github.snems.scoreline.exception.TeamAlreadyPlayingException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
 
 /** The matches in progress on one scoreboard. Immutable: each operation returns the next state, or throws. */
 final class LiveMatches {
+
+    private static final Logger log = getLogger(LiveMatches.class);
 
     private static final Comparator<LiveMatch> SUMMARY_ORDER = Comparator.comparingInt(
             (LiveMatch live) -> live.score().total())
@@ -70,12 +75,15 @@ final class LiveMatches {
     }
 
     private LiveMatch inProgress(MatchId id) {
-        return matches.stream().filter(live -> live.hasId(id)).findFirst()
-                .orElseThrow(() -> new MatchNotFoundException(id));
+        return matches.stream().filter(live -> live.hasId(id)).findFirst().orElseThrow(() -> {
+            log.warn("Rejected request, no match in progress with id {}", id.value());
+            return new MatchNotFoundException(id);
+        });
     }
 
     private void requireNotPlaying(Team team) {
         if (matches.stream().anyMatch(live -> live.involves(team))) {
+            log.warn("Rejected start, team already playing: {}", team.name());
             throw new TeamAlreadyPlayingException(team.name());
         }
     }

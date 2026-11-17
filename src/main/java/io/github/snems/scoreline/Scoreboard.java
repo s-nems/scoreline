@@ -1,6 +1,7 @@
 package io.github.snems.scoreline;
 
 import static java.util.Objects.requireNonNull;
+import static org.slf4j.LoggerFactory.getLogger;
 
 import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.MatchId;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
 
 /**
  * The football matches in progress.
@@ -22,10 +24,16 @@ import java.util.function.Supplier;
  */
 public final class Scoreboard {
 
+    private static final Logger log = getLogger(Scoreboard.class);
+
     private final ReentrantLock writeLock = new ReentrantLock();
 
     /** Each change replaces this with the next immutable state, so a reader takes no lock and sees a complete board. */
     private volatile LiveMatches matches = LiveMatches.empty();
+
+    public Scoreboard() {
+        log.info("Scoreboard created");
+    }
 
     /**
      * Starts a match at 0-0 and gives it a new id.
@@ -42,7 +50,9 @@ public final class Scoreboard {
             var current = matches;
             var next = current.start(matchId, home, away);
             matches = next;
-            return next.match(matchId);
+            var started = next.match(matchId);
+            log.info("Match started: {} ({} in progress)", started, next.summary().size());
+            return started;
         });
     }
 
@@ -58,9 +68,12 @@ public final class Scoreboard {
         var score = new Score(updateScore.homeScore(), updateScore.awayScore());
         return underWriteLock(() -> {
             var current = matches;
+            var previous = current.match(matchId);
             var next = current.updateScore(matchId, score);
             matches = next;
-            return next.match(matchId);
+            var updated = next.match(matchId);
+            log.info("Score updated: {} (was {} - {})", updated, previous.homeScore(), previous.awayScore());
+            return updated;
         });
     }
 
@@ -77,6 +90,7 @@ public final class Scoreboard {
             var finished = current.match(matchId);
             var next = current.finish(matchId);
             matches = next;
+            log.info("Match finished: {} ({} in progress)", finished, next.summary().size());
             return finished;
         });
     }
