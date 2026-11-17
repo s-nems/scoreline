@@ -55,6 +55,12 @@ final class LiveMatches {
         return new LiveMatches(next, nextStartSequence);
     }
 
+    LiveMatches finish(MatchId id) {
+        var finished = inProgress(id);
+        var next = matches.stream().filter(live -> !live.equals(finished)).toList();
+        return new LiveMatches(next, nextStartSequence);
+    }
+
     MatchDto match(MatchId id) {
         return inProgress(id).toDto();
     }

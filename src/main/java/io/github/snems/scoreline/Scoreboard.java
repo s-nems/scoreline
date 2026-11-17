@@ -65,6 +65,23 @@ public final class Scoreboard {
     }
 
     /**
+     * Removes a match in progress and returns it with its final score. The scoreboard keeps nothing about a
+     * finished match.
+     *
+     * @throws MatchNotFoundException if no match in progress on this scoreboard has that id
+     */
+    public MatchDto finish(MatchId matchId) {
+        requireNonNull(matchId);
+        return underWriteLock(() -> {
+            var current = matches;
+            var finished = current.match(matchId);
+            var next = current.finish(matchId);
+            matches = next;
+            return finished;
+        });
+    }
+
+    /**
      * Lists the matches in progress by total score, highest first, then most recently started first. The list is
      * an unmodifiable snapshot.
      */
