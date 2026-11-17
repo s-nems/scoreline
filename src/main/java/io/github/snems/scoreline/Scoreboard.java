@@ -7,11 +7,17 @@ import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.MatchId;
 import io.github.snems.scoreline.dto.StartMatch;
 import io.github.snems.scoreline.dto.UpdateScore;
+import io.github.snems.scoreline.event.MatchFinished;
+import io.github.snems.scoreline.event.MatchStarted;
+import io.github.snems.scoreline.event.ScoreUpdated;
+import io.github.snems.scoreline.event.ScoreboardEvent;
+import io.github.snems.scoreline.event.Subscription;
 import io.github.snems.scoreline.exception.MatchNotFoundException;
 import io.github.snems.scoreline.exception.TeamAlreadyPlayingException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 
@@ -23,6 +29,12 @@ import org.slf4j.Logger;
  * with {@link NullPointerException}.
  *
  * <p>A scoreboard is safe to use from several threads, and a summary is a consistent snapshot of the board.
+ *
+ * <p>A listener gets one event for each change, in the order the changes happened, on the thread that made the
+ * change and before that change returns. So a listener must be quick, and it must not change the scoreboard: a
+ * start, update or finish that a listener makes on the thread it runs on is rejected with
+ * {@link IllegalStateException}. A listener that throws an exception does not affect the change or the other
+ * listeners.
  */
 public final class Scoreboard {
 
@@ -32,6 +44,8 @@ public final class Scoreboard {
 
     /** Each change replaces this with the next immutable state, so a reader takes no lock and sees a complete board. */
     private volatile LiveMatches matches = LiveMatches.empty();
+
+    private final Listeners listeners = new Listeners();
 
     public Scoreboard() {
         log.info("Scoreboard created");
@@ -54,6 +68,7 @@ public final class Scoreboard {
             matches = next;
             var started = next.match(matchId);
             log.info("Match started: {} ({} in progress)", started, next.summary().size());
+            listeners.publish(new MatchStarted(started));
             return started;
         });
     }
@@ -75,6 +90,7 @@ public final class Scoreboard {
             matches = next;
             var updated = next.match(matchId);
             log.info("Score updated: {} (was {} - {})", updated, previous.homeScore(), previous.awayScore());
+            listeners.publish(new ScoreUpdated(updated));
             return updated;
         });
     }
@@ -93,6 +109,7 @@ public final class Scoreboard {
             var next = current.finish(matchId);
             matches = next;
             log.info("Match finished: {} ({} in progress)", finished, next.summary().size());
+            listeners.publish(new MatchFinished(finished));
             return finished;
         });
     }
@@ -105,7 +122,20 @@ public final class Scoreboard {
         return matches.summary();
     }
 
+    /**
+     * Delivers every later change to the listener, until the returned subscription is cancelled. The same listener
+     * subscribed twice gets each event twice.
+     */
+    public Subscription subscribe(Consumer<ScoreboardEvent> listener) {
+        requireNonNull(listener);
+        return listeners.subscribe(listener);
+    }
+
     private MatchDto underWriteLock(Supplier<MatchDto> change) {
+        if (writeLock.isHeldByCurrentThread()) {
+            log.warn("Rejected change made from inside a listener");
+            throw new IllegalStateException("a listener must not change the scoreboard");
+        }
         writeLock.lock();
         try {
             return change.get();

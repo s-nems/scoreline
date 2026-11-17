@@ -24,6 +24,8 @@ reads them.
   ignoring case and surrounding whitespace.
 - Scores are absolute and may go down, which is how a goal is corrected.
 - "Most recently started" follows a start sequence in the aggregate. The library never reads the time.
+- `subscribe` delivers an event for each change while the lock is held, so listeners get them in order. A
+  listener must not change the scoreboard.
 
 ## Conventions
 
@@ -38,7 +40,7 @@ A step is done when `./gradlew build` passes.
 ## Working here
 
 - Follow the conventions already in the code and the tests.
-- Test first, and only through the public API: `Scoreboard`, `dto` and `exception`.
+- Test first, and only through the public API: `Scoreboard`, `dto`, `event` and `exception`.
 - Raise an ambiguous requirement instead of guessing, and record the answer in `README.md`.
 - Each implementation step is reviewed by a separate agent.
 - Conventional Commits as `type: Description`, one logical change per commit. Never push.

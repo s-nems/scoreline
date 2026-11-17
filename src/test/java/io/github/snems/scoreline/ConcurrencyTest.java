@@ -1,13 +1,16 @@
 package io.github.snems.scoreline;
 
 import static io.github.snems.scoreline.SampleMatches.MEXICO;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.concurrent.locks.LockSupport.parkNanos;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.StartMatch;
 import io.github.snems.scoreline.dto.UpdateScore;
+import io.github.snems.scoreline.event.MatchStarted;
 import io.github.snems.scoreline.exception.TeamAlreadyPlayingException;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +30,7 @@ class ConcurrencyTest {
     private static final int FINISHERS = 32;
     private static final int LAST_SCORE = 500;
     private static final int TIMEOUT_SECONDS = 10;
+    private static final long LISTENER_PAUSE_NANOS = MILLISECONDS.toNanos(1);
 
     private final Scoreboard scoreboard = new Scoreboard();
 
@@ -78,12 +82,35 @@ class ConcurrencyTest {
         assertThat(scoreboard.summary()).containsExactlyInAnyOrderElementsOf(lastUpdates);
     }
 
+    @Test
+    void shouldDeliverEventsInOrderOfMatchesStartedAtTheSameTime() throws Exception {
+        // given
+        var sizes = new ArrayList<Integer>();
+        scoreboard.subscribe(event -> {
+            if (event instanceof MatchStarted) {
+                parkNanos(LISTENER_PAUSE_NANOS);
+                sizes.add(scoreboard.summary().size());
+            }
+        });
+        var starters = IntStream.range(0, CONTENDERS).mapToObj(this::starterOfOneMatch).toList();
+
+        // when
+        runTogether(starters);
+
+        // then
+        assertThat(sizes).containsExactlyElementsOf(IntStream.rangeClosed(1, CONTENDERS).boxed().toList());
+    }
+
     private Callable<List<MatchDto>> starterOfManyMatches(int thread) {
         return () -> IntStream.range(0, MATCHES_PER_THREAD)
                 .mapToObj(match -> new StartMatch("Home %d-%d".formatted(thread, match),
                         "Away %d-%d".formatted(thread, match)))
                 .map(scoreboard::start)
                 .toList();
+    }
+
+    private Callable<MatchDto> starterOfOneMatch(int thread) {
+        return () -> startMatch(thread);
     }
 
     private Callable<MatchDto> updaterOfScore(MatchDto match) {
