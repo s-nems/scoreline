@@ -27,6 +27,10 @@ record LiveMatch(
         return home.isSameTeamAs(team) || away.isSameTeamAs(team);
     }
 
+    LiveMatch withScore(Score score) {
+        return new LiveMatch(id, home, away, score, startSequence);
+    }
+
     MatchDto toDto() {
         return new MatchDto(id, home.name(), away.name(), score.home(), score.away());
     }

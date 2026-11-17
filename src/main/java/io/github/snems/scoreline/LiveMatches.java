@@ -2,6 +2,7 @@ package io.github.snems.scoreline;
 
 import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.MatchId;
+import io.github.snems.scoreline.exception.MatchNotFoundException;
 import io.github.snems.scoreline.exception.TeamAlreadyPlayingException;
 import java.util.Comparator;
 import java.util.List;
@@ -10,7 +11,9 @@ import java.util.stream.Stream;
 /** The matches in progress on one scoreboard. Immutable: each operation returns the next state, or throws. */
 final class LiveMatches {
 
-    private static final Comparator<LiveMatch> SUMMARY_ORDER = Comparator.comparingLong(LiveMatch::startSequence)
+    private static final Comparator<LiveMatch> SUMMARY_ORDER = Comparator.comparingInt(
+            (LiveMatch live) -> live.score().total())
+            .thenComparingLong(LiveMatch::startSequence)
             .reversed();
 
     private static final LiveMatches EMPTY = new LiveMatches(List.of(), 0);
@@ -42,12 +45,27 @@ final class LiveMatches {
         return new LiveMatches(next, nextStartSequence + 1);
     }
 
+    LiveMatches updateScore(MatchId id, Score score) {
+        var current = inProgress(id);
+        var updated = current.withScore(score);
+        var next = matches.stream()
+                .map(live -> live.hasId(id) ? updated : live)
+                .sorted(SUMMARY_ORDER)
+                .toList();
+        return new LiveMatches(next, nextStartSequence);
+    }
+
     MatchDto match(MatchId id) {
-        return matches.stream().filter(live -> live.hasId(id)).findFirst().orElseThrow().toDto();
+        return inProgress(id).toDto();
     }
 
     List<MatchDto> summary() {
         return summary;
+    }
+
+    private LiveMatch inProgress(MatchId id) {
+        return matches.stream().filter(live -> live.hasId(id)).findFirst()
+                .orElseThrow(() -> new MatchNotFoundException(id));
     }
 
     private void requireNotPlaying(Team team) {

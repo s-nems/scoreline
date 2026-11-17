@@ -5,6 +5,8 @@ import static java.util.Objects.requireNonNull;
 import io.github.snems.scoreline.dto.MatchDto;
 import io.github.snems.scoreline.dto.MatchId;
 import io.github.snems.scoreline.dto.StartMatch;
+import io.github.snems.scoreline.dto.UpdateScore;
+import io.github.snems.scoreline.exception.MatchNotFoundException;
 import io.github.snems.scoreline.exception.TeamAlreadyPlayingException;
 import java.util.List;
 import java.util.UUID;
@@ -44,7 +46,28 @@ public final class Scoreboard {
         });
     }
 
-    /** Lists the matches in progress, most recently started first. The list is an unmodifiable snapshot. */
+    /**
+     * Replaces the score of a match in progress. The new score may be lower, which is how a goal is corrected.
+     *
+     * @throws IllegalArgumentException if a score is negative or both together do not fit in an {@code int}
+     * @throws MatchNotFoundException if no match in progress on this scoreboard has that id
+     */
+    public MatchDto update(UpdateScore updateScore) {
+        requireNonNull(updateScore);
+        var matchId = updateScore.matchId();
+        var score = new Score(updateScore.homeScore(), updateScore.awayScore());
+        return underWriteLock(() -> {
+            var current = matches;
+            var next = current.updateScore(matchId, score);
+            matches = next;
+            return next.match(matchId);
+        });
+    }
+
+    /**
+     * Lists the matches in progress by total score, highest first, then most recently started first. The list is
+     * an unmodifiable snapshot.
+     */
     public List<MatchDto> summary() {
         return matches.summary();
     }
