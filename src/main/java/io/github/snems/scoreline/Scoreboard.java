@@ -21,6 +21,8 @@ import org.slf4j.Logger;
  * <p>A match is identified by the {@link MatchId} it gets when it is started. A team is identified by its name,
  * ignoring case and surrounding whitespace, and plays one match at a time. A {@code null} argument is rejected
  * with {@link NullPointerException}.
+ *
+ * <p>A scoreboard is safe to use from several threads, and a summary is a consistent snapshot of the board.
  */
 public final class Scoreboard {
 
